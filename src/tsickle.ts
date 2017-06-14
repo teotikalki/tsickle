@@ -188,6 +188,17 @@ class ClosureRewriter extends Rewriter {
   }
 
   /**
+   * Get the ts.Symbol at a location or throw.
+   * The TypeScript API can return undefined when fetching a symbol, but
+   * in many contexts we know it won't (e.g. our input is already type-checked).
+   */
+  mustGetSymbolAtLocation(node: ts.Node): ts.Symbol {
+    const sym = this.typeChecker.getSymbolAtLocation(node);
+    if (!sym) throw new Error('no symbol');
+    return sym;
+  }
+
+  /**
    * Handles emittng the jsdoc for methods, including overloads.
    * If overloaded, merges the signatures in the list of SignatureDeclarations into a single jsdoc.
    * - Total number of parameters will be the maximum count found across all variants.
@@ -398,12 +409,11 @@ class ClosureRewriter extends Rewriter {
         // We can only @implements an interface, not a class.
         // But it's fine to translate TS "implements Class" into Closure
         // "@extends {Class}" because this is just a type hint.
-        const typeChecker = this.typeChecker;
-        let sym = typeChecker.getSymbolAtLocation(impl.expression);
+        let sym = this.mustGetSymbolAtLocation(impl.expression);
         if (sym.flags & ts.SymbolFlags.TypeAlias) {
           // It's implementing a type alias.  Follow the type alias back
           // to the original symbol to check whether it's a type or a value.
-          const type = typeChecker.getDeclaredTypeOfSymbol(sym);
+          const type = this.typeChecker.getDeclaredTypeOfSymbol(sym);
           if (!type.symbol) {
             // It's not clear when this can happen, but if it does all we
             // do is fail to emit the @implements, which isn't so harmful.
@@ -412,7 +422,7 @@ class ClosureRewriter extends Rewriter {
           sym = type.symbol;
         }
         if (sym.flags & ts.SymbolFlags.Alias) {
-          sym = typeChecker.getAliasedSymbol(sym);
+          sym = this.typeChecker.getAliasedSymbol(sym);
         }
         if (this.newTypeTranslator(impl.expression).isBlackListed(sym)) {
           continue;
@@ -558,7 +568,7 @@ class Annotator extends ClosureRewriter {
     }
     const declNames = this.getExportDeclarationNames(node);
     for (const decl of declNames) {
-      const sym = this.typeChecker.getSymbolAtLocation(decl);
+      const sym = this.mustGetSymbolAtLocation(decl);
       const isValue = sym.flags & ts.SymbolFlags.Value;
       const declName = getIdentifierText(decl);
       if (node.kind === ts.SyntaxKind.VariableStatement) {
@@ -922,7 +932,7 @@ class Annotator extends ClosureRewriter {
 
     // Expand the export list, then filter it to the symbols we want to reexport.
     const exports =
-        this.typeChecker.getExportsOfModule(this.typeChecker.getSymbolAtLocation(moduleSpecifier));
+        this.typeChecker.getExportsOfModule(this.mustGetSymbolAtLocation(moduleSpecifier));
     const reexports = new Set<ts.Symbol>();
     for (const sym of exports) {
       const name = unescapeName(sym.name);
@@ -1039,7 +1049,7 @@ class Annotator extends ClosureRewriter {
           // import a from ...;
           symbols = [{
             name: getIdentifierText(importClause.name),
-            sym: this.typeChecker.getSymbolAtLocation(importClause.name)
+            sym: this.mustGetSymbolAtLocation(importClause.name),
           }];
         } else {
           // import {a as b} from ...;
@@ -1071,7 +1081,7 @@ class Annotator extends ClosureRewriter {
         // e.name might be renaming symbol as in `export {Foo as Bar}`, where e.name would be 'Bar'
         // and != sym.name. Store away the name so forwardDeclare below can emit the right name.
         name: getIdentifierText(e.name),
-        sym: this.typeChecker.getSymbolAtLocation(e.name),
+        sym: this.mustGetSymbolAtLocation(e.name),
       };
     });
   }
@@ -1090,8 +1100,7 @@ class Annotator extends ClosureRewriter {
     const forwardDeclarePrefix = `tsickle_forward_declare_${++this.forwardDeclareCounter}`;
     const moduleNamespace =
         nsImport !== null ? nsImport : this.host.pathToModuleName(this.file.fileName, importPath);
-    const exports =
-        this.typeChecker.getExportsOfModule(this.typeChecker.getSymbolAtLocation(specifier));
+    const exports = this.typeChecker.getExportsOfModule(this.mustGetSymbolAtLocation(specifier));
     // In TypeScript, importing a module for use in a type annotation does not cause a runtime load.
     // In Closure Compiler, goog.require'ing a module causes a runtime load, so emitting requires
     // here would cause a change in load order, which is observable (and can lead to errors).
@@ -1150,7 +1159,7 @@ class Annotator extends ClosureRewriter {
   private emitInterface(iface: ts.InterfaceDeclaration) {
     // If this symbol is both a type and a value, we cannot emit both into Closure's
     // single namespace.
-    const sym = this.typeChecker.getSymbolAtLocation(iface.name);
+    const sym = this.mustGetSymbolAtLocation(iface.name);
     if (sym.flags & ts.SymbolFlags.Value) return;
 
     const docTags = this.getJSDoc(iface) || [];
@@ -1285,7 +1294,7 @@ class Annotator extends ClosureRewriter {
 
     // If the type is also defined as a value, skip emitting it. Closure collapses type & value
     // namespaces, the two emits would conflict if tsickle emitted both.
-    const sym = this.typeChecker.getSymbolAtLocation(node.name);
+    const sym = this.mustGetSymbolAtLocation(node.name);
     if (sym.flags & ts.SymbolFlags.Value) return;
 
     // Write a Closure typedef, which involves an unused "var" declaration.
@@ -1474,7 +1483,7 @@ class ExternsWriter extends ClosureRewriter {
           break;
         }
         // Gather up all overloads of this function.
-        const sym = this.typeChecker.getSymbolAtLocation(name);
+        const sym = this.mustGetSymbolAtLocation(name);
         const decls = sym.declarations!.filter(d => d.kind === ts.SyntaxKind.FunctionDeclaration) as
             ts.FunctionDeclaration[];
         // Only emit the first declaration of each overloaded function.
@@ -1508,8 +1517,7 @@ class ExternsWriter extends ClosureRewriter {
    */
   private isFirstDeclaration(decl: ts.DeclarationStatement): boolean {
     if (!decl.name) return true;
-    const typeChecker = this.typeChecker;
-    const sym = typeChecker.getSymbolAtLocation(decl.name);
+    const sym = this.mustGetSymbolAtLocation(decl.name);
     if (!sym.declarations || sym.declarations.length < 2) return true;
     return decl === sym.declarations[0];
   }
