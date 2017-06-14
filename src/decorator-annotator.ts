@@ -12,7 +12,7 @@ import * as ts from 'typescript';
 import {getDecoratorDeclarations} from './decorators';
 import {getIdentifierText, Rewriter} from './rewriter';
 import {SourceMapper} from './source_map_utils';
-import {assertTypeChecked, TypeTranslator} from './type-translator';
+import {TypeTranslator} from './type-translator';
 import {toArray} from './util';
 
 // DecoratorClassVisitor rewrites a single "class Foo {...}" declaration.
@@ -361,6 +361,5 @@ export function visitClassContentIncludingDecorators(
 export function convertDecorators(
     typeChecker: ts.TypeChecker, sourceFile: ts.SourceFile,
     sourceMapper?: SourceMapper): {output: string, diagnostics: ts.Diagnostic[]} {
-  assertTypeChecked(sourceFile);
   return new DecoratorRewriter(typeChecker, sourceFile, sourceMapper).process();
 }
