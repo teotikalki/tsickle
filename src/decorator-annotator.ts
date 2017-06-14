@@ -114,7 +114,7 @@ export class DecoratorClassVisitor {
   /**
    * gatherMethod grabs the decorators off a class method and emits nothing.
    */
-  private gatherMethodOrProperty(method: ts.Declaration) {
+  private gatherMethodOrProperty(method: ts.NamedDeclaration) {
     if (!method.decorators) return;
     if (!method.name || method.name.kind !== ts.SyntaxKind.Identifier) {
       // Method has a weird name, e.g.

@@ -565,7 +565,7 @@ class Annotator extends ClosureRewriter {
       case ts.SyntaxKind.FunctionDeclaration:
       case ts.SyntaxKind.InterfaceDeclaration:
       case ts.SyntaxKind.ClassDeclaration:
-        const decl = node as ts.Declaration;
+        const decl = node as ts.NamedDeclaration;
         if (!decl.name || decl.name.kind !== ts.SyntaxKind.Identifier) {
           break;
         }
@@ -800,7 +800,8 @@ class Annotator extends ClosureRewriter {
         // If it has a symbol, it's actually a regular declared property.
         if (!quotedPropSym) return false;
         const declarationHasQuotes =
-            !quotedPropSym.declarations || quotedPropSym.declarations.some(decl => {
+            !quotedPropSym.declarations || quotedPropSym.declarations.some(d => {
+              const decl = d as ts.NamedDeclaration;
               if (!decl.name) return false;
               return decl.name.kind === ts.SyntaxKind.StringLiteral;
             });
@@ -1271,7 +1272,7 @@ class Annotator extends ClosureRewriter {
     this.emit(`}\n`);
   }
 
-  private propertyName(prop: ts.Declaration): string|null {
+  private propertyName(prop: ts.NamedDeclaration): string|null {
     if (!prop.name) return null;
 
     switch (prop.name.kind) {
@@ -1352,15 +1353,15 @@ class Annotator extends ClosureRewriter {
       return false;
     }
 
-    // Gather the members of enum, saving the constant value or
-    // initializer expression in the case of a non-constant value.
+    // Gather the members of enum, saving the constant numeric value or
+    // initializer expression in the case of a non-constant value or string.
     const members = new Map<string, number|ts.Node>();
     let i = 0;
     for (const member of node.members) {
       const memberName = member.name.getText();
       if (member.initializer) {
         const enumConstValue = this.typeChecker.getConstantValue(member);
-        if (enumConstValue !== undefined) {
+        if (typeof enumConstValue === 'number') {
           members.set(memberName, enumConstValue);
           i = enumConstValue + 1;
         } else {

@@ -61,6 +61,7 @@ export function typeToDebugString(type: ts.Type): string {
       ts.ObjectFlags.Instantiated,
       ts.ObjectFlags.ObjectLiteral,
       ts.ObjectFlags.EvolvingArray,
+      ts.ObjectFlags.ObjectLiteralPatternWithComputedProperties,
     ];
     for (const flag of objectFlags) {
       if ((objType.objectFlags & flag) !== 0) {
@@ -202,7 +203,7 @@ export class TypeTranslator {
         return;
       },
       reportInaccessibleThisError: doNothing,
-      reportIllegalExtends: doNothing,
+      reportPrivateInBaseOfClassExpression: doNothing,
     };
     builder.buildSymbolDisplay(sym, writer, this.node);
     return this.stripClutzNamespace(str);
@@ -243,6 +244,7 @@ export class TypeTranslator {
         return 'boolean';
       case ts.TypeFlags.Enum:
       case ts.TypeFlags.EnumLiteral:
+        // TODO(evanm): add test cases for string enums and fix this logic.
         return 'number';
       case ts.TypeFlags.ESSymbol:
         // NOTE: currently this is just a typedef for {?}, shrug.
@@ -289,8 +291,14 @@ export class TypeTranslator {
           return this.translateUnion(type as ts.UnionType);
         }
 
+        // Some enums are represented as
+        //   ts.TypeFlags.NumberLiteral | ts.TypeFlags.EnumLiteral
+        if (type.flags === (ts.TypeFlags.NumberLiteral | ts.TypeFlags.EnumLiteral)) {
+          return 'number';
+        }
+
         // The switch statement should have been exhaustive.
-        throw new Error(`unknown type flags: ${type.flags}`);
+        throw new Error(`unknown type flags: ${type.flags} ${typeToDebugString(type)}`);
     }
   }
 
