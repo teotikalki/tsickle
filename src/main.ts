@@ -159,7 +159,8 @@ export function toClosureJS(
     {jsFiles: Map<string, string>, externs: string}|null {
   const closureJSOptions: ClosureJSOptions = {
     ...getDefaultClosureJSOptions(fileNames, settings),
-    ...partialClosureJSOptions
+    // Work around https://github.com/Microsoft/TypeScript/issues/16509.
+    ...(partialClosureJSOptions as ClosureJSOptions),
   };
   // Parse and load the program without tsickle processing.
   // This is so:

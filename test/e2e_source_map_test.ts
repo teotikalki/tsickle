@@ -345,7 +345,11 @@ const DEFAULT_COMPILER_OPTIONS = {
 
 function compile(sources: Map<string, string>, partialOptions = {} as Partial<CompilerOptions>):
     {compiledJS: string, dts: string | undefined, sourceMap: SourceMapConsumer} {
-  const options: CompilerOptions = {...DEFAULT_COMPILER_OPTIONS, ...partialOptions};
+  const options: CompilerOptions = {
+    ...DEFAULT_COMPILER_OPTIONS,
+    // Work around https://github.com/Microsoft/TypeScript/issues/16509
+    ...(partialOptions as CompilerOptions),
+  };
   const resolvedSources = new Map<string, string>();
   for (const fileName of toArray(sources.keys())) {
     resolvedSources.set(ts.sys.resolvePath(fileName), sources.get(fileName)!);
